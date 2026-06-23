@@ -1,0 +1,93 @@
+version: '3.8'
+
+x-airflow-common: &airflow-common
+  image: apache/airflow:2.7.2
+  environment:
+    - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+    - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres_db:5432/airflow
+    - AIRFLOW__CORE__FERNET_KEY=fbZ9mS3A4A-mXN3rQ0KjL9L3S9JpXh0U0K9D0Xf2X-c=
+    - AIRFLOW__CORE__LOAD_EXAMPLES=False
+    - WEATHER_CSV_PATH=/opt/airflow/data/weather_data.csv
+    - ANALYTICS_CSV_PATH=/opt/airflow/data/city_analytics.csv
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - ./plugins:/opt/airflow/plugins
+    - ./config:/opt/airflow/config
+    - ./data:/opt/airflow/data
+  user: "50000:0"
+  depends_on:
+    postgres_db:
+      condition: service_healthy
+
+services:
+  # Metadata Database for Airflow
+  postgres_db:
+    image: postgres:13
+    environment:
+      - POSTGRES_USER=airflow
+      - POSTGRES_PASSWORD=airflow
+      - POSTGRES_DB=airflow
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+
+  # Instantiates Airflow Schema definitions on first execution
+  airflow-init:
+    <<: *airflow-common
+    command: version
+    environment:
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres_db:5432/airflow
+      - _AIRFLOW_DB_UPGRADE=true
+      - _AIRFLOW_WWW_USER_CREATE=true
+      - _AIRFLOW_WWW_USER_USERNAME=airflow
+      - _AIRFLOW_WWW_USER_PASSWORD=airflow
+    depends_on:
+      postgres_db:
+        condition: service_healthy
+
+  # Airflow Web Dashboard
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: always
+
+  # Airflow Engine Scheduler
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    restart: always
+
+  # Streamlit Web Client Application Portal
+  streamlit-app:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    image: custom-streamlit-weather-app:latest
+    container_name: streamlit_weather_portal
+    environment:
+      - WEATHER_CSV_PATH=/data/weather_data.csv
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./data:/data
+    depends_on:
+      - airflow-scheduler
+    restart: always
+
+volumes:
+  postgres_data:
+  data:

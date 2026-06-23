@@ -1,0 +1,6 @@
+{
+  "name": "Real-Time Weather Pipeline",
+  "description": "An interactive real-time weather monitoring dashboard pairing a simulated Airflow-orchestrated data pipeline with a Streamlit-inspired visualization map of India.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
